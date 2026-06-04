@@ -30,6 +30,7 @@ class TargetTrackingApp:
     def run(self) -> None:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
         self.display.create()
+        self.roi_selector.attach()
 
         try:
             LOG.info("Opening camera")
@@ -49,6 +50,7 @@ class TargetTrackingApp:
             frame = self.camera_source.read()
             self._frame_count += 1
             image = frame.image
+            frame_stats = self._frame_stats(image)
 
             if self.tracker.initialized:
                 result = self.tracker.update(image)
@@ -66,9 +68,11 @@ class TargetTrackingApp:
                 image,
                 DisplayOverlay(
                     bbox=self._last_bbox,
+                    selection_bbox=self.roi_selector.pending_bbox,
                     center=self._last_center,
                     status=self._status,
                     tracker_name=self.tracker.name,
+                    frame_stats=frame_stats,
                 ),
             )
 
@@ -79,12 +83,19 @@ class TargetTrackingApp:
             if key == ord("s"):
                 self._select_target(image)
 
+            mouse_bbox = self.roi_selector.pop_selected()
+            if mouse_bbox is not None:
+                self._initialize_target(image, mouse_bbox)
+
     def _select_target(self, image) -> None:
         bbox = self.roi_selector.select(image)
         if bbox is None:
             self._status = "NO TARGET"
             return
 
+        self._initialize_target(image, bbox)
+
+    def _initialize_target(self, image, bbox: tuple[int, int, int, int]) -> None:
         self.tracker.initialize(image, bbox)
         self._last_bbox = bbox
         self._last_center = self._bbox_center(bbox)
@@ -112,3 +123,10 @@ class TargetTrackingApp:
     def _bbox_center(bbox: tuple[int, int, int, int]) -> tuple[int, int]:
         x, y, w, h = bbox
         return x + w // 2, y + h // 2
+
+    @staticmethod
+    def _frame_stats(image) -> str:
+        return (
+            f"frame: {image.shape[1]}x{image.shape[0]} "
+            f"min={int(image.min())} max={int(image.max())} mean={float(image.mean()):.1f}"
+        )

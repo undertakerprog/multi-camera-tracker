@@ -7,28 +7,71 @@ import numpy as np
 @dataclass(slots=True)
 class DisplayOverlay:
     bbox: tuple[int, int, int, int] | None = None
+    selection_bbox: tuple[int, int, int, int] | None = None
     center: tuple[int, int] | None = None
     status: str = "NO TARGET"
     tracker_name: str | None = None
+    frame_stats: str | None = None
 
 
 class OpenCVDisplay:
-    def __init__(self, window_name: str = "Target Tracker") -> None:
+    def __init__(self, window_name: str = "Target Tracker", auto_contrast: bool = True) -> None:
         self.window_name = window_name
+        self.auto_contrast = auto_contrast
+        self._created = False
 
     def create(self) -> None:
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        self._created = True
+
+    def set_mouse_callback(self, callback) -> None:
+        cv2.setMouseCallback(self.window_name, callback)
+
+    def is_open(self) -> bool:
+        if not self._created:
+            return False
+        try:
+            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) >= 1
+        except cv2.error:
+            return False
 
     def show(self, image: np.ndarray, overlay: DisplayOverlay) -> int:
-        canvas = image.copy()
+        if not self.is_open():
+            return ord("q")
+
+        canvas = self._prepare_canvas(image)
         self._draw_overlay(canvas, overlay)
         cv2.imshow(self.window_name, canvas)
         return cv2.waitKey(1) & 0xFF
 
     def close(self) -> None:
-        cv2.destroyWindow(self.window_name)
+        if self._created:
+            try:
+                cv2.destroyWindow(self.window_name)
+            except cv2.error:
+                pass
+            self._created = False
+
+    def _prepare_canvas(self, image: np.ndarray) -> np.ndarray:
+        canvas = image.copy()
+        if not self.auto_contrast:
+            return canvas
+
+        if canvas.dtype != np.uint8:
+            return cv2.normalize(canvas, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+        min_value = int(canvas.min())
+        max_value = int(canvas.max())
+        if max_value <= 40 or max_value - min_value < 20:
+            return cv2.normalize(canvas, None, 0, 255, cv2.NORM_MINMAX)
+
+        return canvas
 
     def _draw_overlay(self, image: np.ndarray, overlay: DisplayOverlay) -> None:
+        if overlay.selection_bbox is not None:
+            x, y, w, h = overlay.selection_bbox
+            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 255), 2)
+
         if overlay.bbox is not None:
             x, y, w, h = overlay.bbox
             color = (0, 255, 0) if overlay.status == "TRACKING" else (0, 165, 255)
@@ -66,3 +109,15 @@ class OpenCVDisplay:
             2,
             cv2.LINE_AA,
         )
+
+        if overlay.frame_stats:
+            cv2.putText(
+                image,
+                overlay.frame_stats,
+                (10, image.shape[0] - 15),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
