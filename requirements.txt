@@ -1,0 +1,7 @@
+numpy>=1.21
+
+# OpenCV is expected to be installed on the Jetson system.
+# For CSRT/KCF/MOSSE trackers, OpenCV must include the tracking/contrib module.
+#
+# XIMEA Python bindings are provided by the XIMEA Linux Software Package:
+#   from ximea import xiapi
