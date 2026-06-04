@@ -79,6 +79,7 @@ class TargetTrackingApp:
             )
 
             if key in (ord("q"), 27):
+                LOG.info("Exit key received: %s", key)
                 break
             if key == ord("r"):
                 self._reset_target()
