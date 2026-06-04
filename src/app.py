@@ -51,6 +51,8 @@ class TargetTrackingApp:
             self._frame_count += 1
             image = frame.image
             frame_stats = self._frame_stats(image)
+            if self._frame_count == 1:
+                LOG.info("First %s", frame_stats)
 
             if self.tracker.initialized:
                 result = self.tracker.update(image)

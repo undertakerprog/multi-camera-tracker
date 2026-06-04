@@ -32,7 +32,7 @@ class OpenCVDisplay:
         if not self._created:
             return False
         try:
-            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) >= 1
+            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) >= 0
         except cv2.error:
             return False
 
