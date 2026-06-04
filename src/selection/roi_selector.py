@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 
 
 class ROISelector:
@@ -20,20 +19,6 @@ class ROISelector:
         bbox = self._selected_bbox
         self._selected_bbox = None
         return bbox
-
-    def select(self, image: np.ndarray) -> tuple[int, int, int, int] | None:
-        bbox = cv2.selectROI(
-            self.window_name,
-            image,
-            showCrosshair=True,
-            fromCenter=False,
-        )
-        cv2.setWindowTitle(self.window_name, self.window_name)
-
-        x, y, w, h = (int(value) for value in bbox)
-        if w <= 0 or h <= 0:
-            return None
-        return x, y, w, h
 
     def _on_mouse(self, event, x: int, y: int, flags, userdata) -> None:
         if event == cv2.EVENT_LBUTTONDOWN:

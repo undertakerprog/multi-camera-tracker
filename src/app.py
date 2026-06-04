@@ -29,15 +29,16 @@ class TargetTrackingApp:
 
     def run(self) -> None:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-        self.display.create()
-        self.roi_selector.attach()
 
         try:
             LOG.info("Opening camera")
             self.camera_source.open()
             self.camera_source.start()
             LOG.info("Camera acquisition started")
-            self._loop()
+            first_frame = self._read_frame()
+            self.display.create(first_frame.image.shape)
+            self.roi_selector.attach()
+            self._loop(first_frame)
         except CameraError as exc:
             LOG.error("Camera error: %s", exc)
         except TrackerError as exc:
@@ -45,14 +46,14 @@ class TargetTrackingApp:
         finally:
             self._shutdown()
 
-    def _loop(self) -> None:
+    def _loop(self, first_frame=None) -> None:
+        frame = first_frame
         while True:
-            frame = self.camera_source.read()
-            self._frame_count += 1
+            if frame is None:
+                frame = self._read_frame()
+
             image = frame.image
             frame_stats = self._frame_stats(image)
-            if self._frame_count == 1:
-                LOG.info("First %s", frame_stats)
 
             if self.tracker.initialized:
                 result = self.tracker.update(image)
@@ -84,19 +85,20 @@ class TargetTrackingApp:
             if key == ord("r"):
                 self._reset_target()
             if key == ord("s"):
-                self._select_target(image)
+                LOG.info("Use left mouse drag in the video window to select target")
 
             mouse_bbox = self.roi_selector.pop_selected()
             if mouse_bbox is not None:
                 self._initialize_target(image, mouse_bbox)
 
-    def _select_target(self, image) -> None:
-        bbox = self.roi_selector.select(image)
-        if bbox is None:
-            self._status = "NO TARGET"
-            return
+            frame = None
 
-        self._initialize_target(image, bbox)
+    def _read_frame(self):
+        frame = self.camera_source.read()
+        self._frame_count += 1
+        if self._frame_count == 1:
+            LOG.info("First %s", self._frame_stats(frame.image))
+        return frame
 
     def _initialize_target(self, image, bbox: tuple[int, int, int, int]) -> None:
         self.tracker.initialize(image, bbox)

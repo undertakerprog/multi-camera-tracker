@@ -20,8 +20,11 @@ class OpenCVDisplay:
         self.auto_contrast = auto_contrast
         self._created = False
 
-    def create(self) -> None:
+    def create(self, image_shape: tuple[int, ...] | None = None) -> None:
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        if image_shape is not None:
+            height, width = image_shape[:2]
+            cv2.resizeWindow(self.window_name, width, height)
         self._created = True
 
     def set_mouse_callback(self, callback) -> None:
@@ -31,11 +34,14 @@ class OpenCVDisplay:
         if not self._created:
             return False
         try:
-            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) >= 0
+            return cv2.getWindowProperty(self.window_name, cv2.WND_PROP_AUTOSIZE) >= 0
         except cv2.error:
             return False
 
     def show(self, image: np.ndarray, overlay: DisplayOverlay) -> int:
+        if not self.is_open():
+            return ord("q")
+
         canvas = self._prepare_canvas(image)
         self._draw_overlay(canvas, overlay)
         cv2.imshow(self.window_name, canvas)
