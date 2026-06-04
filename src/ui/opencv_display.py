@@ -19,6 +19,7 @@ class OpenCVDisplay:
         self.window_name = window_name
         self.auto_contrast = auto_contrast
         self._created = False
+        self._frames_shown = 0
 
     def create(self) -> None:
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
@@ -36,13 +37,19 @@ class OpenCVDisplay:
             return False
 
     def show(self, image: np.ndarray, overlay: DisplayOverlay) -> int:
-        if not self.is_open():
-            return ord("q")
-
         canvas = self._prepare_canvas(image)
         self._draw_overlay(canvas, overlay)
         cv2.imshow(self.window_name, canvas)
-        return cv2.waitKey(1) & 0xFF
+        self._frames_shown += 1
+
+        key = cv2.waitKey(1) & 0xFF
+        if key != 255:
+            return key
+
+        if self._frames_shown > 1 and not self.is_open():
+            return ord("q")
+
+        return key
 
     def close(self) -> None:
         if self._created:
@@ -51,6 +58,7 @@ class OpenCVDisplay:
             except cv2.error:
                 pass
             self._created = False
+            self._frames_shown = 0
 
     def _prepare_canvas(self, image: np.ndarray) -> np.ndarray:
         canvas = image.copy()
