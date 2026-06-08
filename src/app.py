@@ -14,12 +14,13 @@ class TargetTrackingApp:
         self,
         camera_source: CameraSource,
         tracker: OpenCVObjectTracker | None = None,
-        tracker_type: str = "CSRT",
+        tracker_type: str = "KCF",
+        tracking_scale: float = 0.5,
         display: OpenCVDisplay | None = None,
         roi_selector: ROISelector | None = None,
     ) -> None:
         self.camera_source = camera_source
-        self.tracker = tracker or OpenCVObjectTracker(tracker_type)
+        self.tracker = tracker or OpenCVObjectTracker(tracker_type, tracking_scale)
         self.display = display or OpenCVDisplay()
         self.roi_selector = roi_selector or ROISelector(self.display.window_name)
         self._last_bbox: tuple[int, int, int, int] | None = None

@@ -23,7 +23,13 @@ python3 main.py
 
 ```bash
 python3 main.py --tracker CSRT
-python3 main.py --tracker KCF --serial 24802261 --exposure-us 5000 --gain-db 3
+python3 main.py --tracker KCF --tracking-scale 0.5 --serial 24802261 --exposure-us 5000 --gain-db 3
+```
+
+Для более быстрого трекинга можно уменьшить внутренний размер кадра:
+
+```bash
+python3 main.py --tracker KCF --tracking-scale 0.33
 ```
 
 Управление:

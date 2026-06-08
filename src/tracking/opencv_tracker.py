@@ -22,14 +22,17 @@ class TrackingResult:
 
 
 class OpenCVObjectTracker:
-    def __init__(self, tracker_type: str = "CSRT") -> None:
+    def __init__(self, tracker_type: str = "KCF", tracking_scale: float = 0.5) -> None:
         self.tracker_type = tracker_type.upper()
+        if tracking_scale <= 0 or tracking_scale > 1:
+            raise TrackerError("tracking_scale must be > 0 and <= 1")
+        self.tracking_scale = tracking_scale
         self._tracker = None
         self._initialized = False
 
     @property
     def name(self) -> str:
-        return self.tracker_type
+        return f"{self.tracker_type} x{self.tracking_scale:g}"
 
     @property
     def initialized(self) -> bool:
@@ -37,7 +40,9 @@ class OpenCVObjectTracker:
 
     def initialize(self, image: np.ndarray, bbox: tuple[int, int, int, int]) -> None:
         self._tracker = self._create_tracker()
-        ok = self._tracker.init(image, bbox)
+        tracking_image = self._resize_for_tracking(image)
+        tracking_bbox = self._scale_bbox(bbox, self.tracking_scale)
+        ok = self._tracker.init(tracking_image, tracking_bbox)
         if ok is False:
             self._tracker = None
             self._initialized = False
@@ -48,11 +53,12 @@ class OpenCVObjectTracker:
         if not self._tracker or not self._initialized:
             return TrackingResult(ok=False)
 
-        ok, bbox = self._tracker.update(image)
+        tracking_image = self._resize_for_tracking(image)
+        ok, bbox = self._tracker.update(tracking_image)
         if not ok:
             return TrackingResult(ok=False)
 
-        x, y, w, h = (int(round(value)) for value in bbox)
+        x, y, w, h = self._scale_bbox(bbox, 1 / self.tracking_scale)
         return TrackingResult(ok=True, bbox=(x, y, w, h))
 
     def reset(self) -> None:
@@ -87,3 +93,28 @@ class OpenCVObjectTracker:
             owners.append(legacy)
 
         return [(owner, name) for owner in owners for name in names]
+
+    def _resize_for_tracking(self, image: np.ndarray) -> np.ndarray:
+        if self.tracking_scale == 1:
+            return image
+
+        return cv2.resize(
+            image,
+            None,
+            fx=self.tracking_scale,
+            fy=self.tracking_scale,
+            interpolation=cv2.INTER_AREA,
+        )
+
+    @staticmethod
+    def _scale_bbox(
+        bbox: tuple[int, int, int, int] | tuple[float, float, float, float],
+        scale: float,
+    ) -> tuple[int, int, int, int]:
+        x, y, w, h = bbox
+        return (
+            int(round(x * scale)),
+            int(round(y * scale)),
+            max(1, int(round(w * scale))),
+            max(1, int(round(h * scale))),
+        )
