@@ -1,4 +1,4 @@
 from .base import CameraError, CameraSource
-from .ximea_camera import XimeaCameraSource
+from .basler_camera import BaslerCameraSource
 
-__all__ = ["CameraError", "CameraSource", "XimeaCameraSource"]
+__all__ = ["BaslerCameraSource", "CameraError", "CameraSource"]

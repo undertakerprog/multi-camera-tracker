@@ -4,7 +4,7 @@
 
 ## Возможности первого этапа
 
-- открытие XIMEA-камеры через `ximea.xiapi`;
+- открытие Basler daA1600-60um через `pypylon`;
 - получение кадров и приведение их к формату OpenCV;
 - отображение видеопотока;
 - выбор цели мышью;
@@ -23,14 +23,38 @@ python3 main.py
 
 ```bash
 python3 main.py --tracker CSRT
-python3 main.py --tracker KCF --exposure-us 5000 --gain-db 3
+python3 main.py --tracker KCF --serial 24802261 --exposure-us 5000 --gain-db 3
 ```
 
 Управление:
 
-- `s` - выбрать область цели;
+- выделение мышью - выбрать область цели;
 - `r` - сбросить текущую цель;
 - `q` или `Esc` - выйти.
+
+## Basler Setup
+
+На Jetson должен быть установлен Basler pylon Software Suite для Linux ARM64.
+Для USB3-камер нужно выполнить:
+
+```bash
+sudo /opt/pylon/share/pylon/setup-usb.sh
+```
+
+После этого переподключить камеру или перезагрузить Jetson.
+
+Проверка камеры:
+
+```bash
+python3 - <<'PY'
+from pypylon import pylon
+
+devices = pylon.TlFactory.GetInstance().EnumerateDevices()
+print("devices:", len(devices))
+for d in devices:
+    print(d.GetModelName(), d.GetSerialNumber(), d.GetDeviceClass())
+PY
+```
 
 ## Структура
 
@@ -39,7 +63,7 @@ src/
 ├── app.py
 ├── cameras/
 │   ├── base.py
-│   └── ximea_camera.py
+│   └── basler_camera.py
 ├── common/
 │   └── frame.py
 ├── selection/
@@ -50,4 +74,4 @@ src/
     └── opencv_display.py
 ```
 
-Код XIMEA изолирован в `src/cameras/ximea_camera.py`. Остальная система работает только через общий интерфейс `CameraSource`.
+Код Basler/pypylon изолирован в `src/cameras/basler_camera.py`. Остальная система работает только через общий интерфейс `CameraSource`.
