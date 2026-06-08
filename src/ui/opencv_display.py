@@ -12,6 +12,7 @@ class DisplayOverlay:
     status: str = "NO TARGET"
     tracker_name: str | None = None
     frame_stats: str | None = None
+    telemetry: str | None = None
 
 
 class OpenCVDisplay:
@@ -120,6 +121,18 @@ class OpenCVDisplay:
                 (10, image.shape[0] - 15),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
+        if overlay.telemetry:
+            cv2.putText(
+                image,
+                overlay.telemetry,
+                (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
                 (255, 255, 255),
                 1,
                 cv2.LINE_AA,

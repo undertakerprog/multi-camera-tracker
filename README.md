@@ -32,6 +32,12 @@ python3 main.py --tracker KCF --tracking-scale 0.5 --serial 24802261 --exposure-
 python3 main.py --tracker KCF --tracking-scale 0.33
 ```
 
+Сглаживание рамки и удержание состояния при краткой потере цели:
+
+```bash
+python3 main.py --tracker KCF --tracking-scale 0.5 --smooth-alpha 0.3 --max-lost-frames 10
+```
+
 Управление:
 
 - выделение мышью - выбрать область цели;

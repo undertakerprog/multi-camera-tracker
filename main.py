@@ -18,6 +18,18 @@ def main() -> None:
         default=0.5,
         help="Scale used internally by tracker, 1.0 is full resolution",
     )
+    parser.add_argument(
+        "--smooth-alpha",
+        type=float,
+        default=0.35,
+        help="Bounding box smoothing alpha, higher is more responsive",
+    )
+    parser.add_argument(
+        "--max-lost-frames",
+        type=int,
+        default=10,
+        help="Frames to keep last target state after tracker update failure",
+    )
     parser.add_argument("--serial", default=None, help="Basler camera serial number")
     parser.add_argument("--exposure-us", type=int, default=None)
     parser.add_argument("--gain-db", type=float, default=None)
@@ -38,6 +50,8 @@ def main() -> None:
         camera_source=camera,
         tracker_type=args.tracker,
         tracking_scale=args.tracking_scale,
+        smoothing_alpha=args.smooth_alpha,
+        max_lost_frames=args.max_lost_frames,
     )
     app.run()
 
