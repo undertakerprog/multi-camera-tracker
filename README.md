@@ -38,6 +38,12 @@ python3 main.py --tracker KCF --tracking-scale 0.5
 python3 main.py --tracker CSRT --tracking-scale 0.75 --smooth-alpha 0.3 --max-lost-frames 120 --reacquire-score 0.62
 ```
 
+Глобальный перезахват по запомненному объекту после ухода камеры в сторону:
+
+```bash
+python3 main.py --tracker CSRT --tracking-scale 0.75 --global-reacquire-after 8 --global-reacquire-interval 5
+```
+
 Управление:
 
 - выделение мышью - выбрать область цели;

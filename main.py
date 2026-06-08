@@ -48,6 +48,35 @@ def main() -> None:
         help="Search area expansion around predicted target bbox",
     )
     parser.add_argument(
+        "--disable-global-reacquire",
+        action="store_true",
+        help="Disable full-frame target re-identification after local search fails",
+    )
+    parser.add_argument(
+        "--global-reacquire-after",
+        type=int,
+        default=8,
+        help="Lost frames before full-frame target re-identification starts",
+    )
+    parser.add_argument(
+        "--global-reacquire-interval",
+        type=int,
+        default=5,
+        help="Run full-frame re-identification every N frames while lost",
+    )
+    parser.add_argument(
+        "--global-reacquire-score",
+        type=float,
+        default=0.72,
+        help="Minimum full-frame template score for re-identification fallback",
+    )
+    parser.add_argument(
+        "--global-reacquire-scale",
+        type=float,
+        default=0.5,
+        help="Scale for full-frame template re-identification fallback",
+    )
+    parser.add_argument(
         "--template-update-interval",
         type=int,
         default=15,
@@ -78,6 +107,11 @@ def main() -> None:
         reacquire_enabled=not args.disable_reacquire,
         reacquire_min_score=args.reacquire_score,
         reacquire_search_expansion=args.reacquire_search,
+        global_reacquire_enabled=not args.disable_global_reacquire,
+        global_reacquire_after=args.global_reacquire_after,
+        global_reacquire_interval=args.global_reacquire_interval,
+        global_reacquire_score=args.global_reacquire_score,
+        global_reacquire_scale=args.global_reacquire_scale,
         template_update_interval=args.template_update_interval,
     )
     app.run()

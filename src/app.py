@@ -23,6 +23,11 @@ class TargetTrackingApp:
         reacquire_enabled: bool = True,
         reacquire_min_score: float = 0.62,
         reacquire_search_expansion: float = 3.0,
+        global_reacquire_enabled: bool = True,
+        global_reacquire_after: int = 8,
+        global_reacquire_interval: int = 5,
+        global_reacquire_score: float = 0.72,
+        global_reacquire_scale: float = 0.5,
         template_update_interval: int = 15,
         display: OpenCVDisplay | None = None,
         roi_selector: ROISelector | None = None,
@@ -36,8 +41,13 @@ class TargetTrackingApp:
         self.reacquirer = TemplateReacquirer(
             search_expansion=reacquire_search_expansion,
             min_score=reacquire_min_score,
+            global_min_score=global_reacquire_score,
+            global_search_scale=global_reacquire_scale,
         )
         self.reacquire_enabled = reacquire_enabled
+        self.global_reacquire_enabled = global_reacquire_enabled
+        self.global_reacquire_after = global_reacquire_after
+        self.global_reacquire_interval = global_reacquire_interval
         self.template_update_interval = template_update_interval
         self.display = display or OpenCVDisplay()
         self.roi_selector = roi_selector or ROISelector(self.display.window_name)
@@ -91,6 +101,11 @@ class TargetTrackingApp:
 
                 if not result.ok and self.reacquire_enabled:
                     reacquired_bbox, score = self.reacquirer.search(image, state.bbox)
+                    if (
+                        reacquired_bbox is None
+                        and self._should_global_reacquire()
+                    ):
+                        reacquired_bbox, score = self.reacquirer.search_global(image)
                     self._last_reacquire_score = score
                     if reacquired_bbox is not None:
                         self.tracker.initialize(image, reacquired_bbox)
@@ -210,3 +225,12 @@ class TargetTrackingApp:
             f"lost={self.target_state.lost_frames} "
             f"match={self._last_reacquire_score:.2f}"
         )
+
+    def _should_global_reacquire(self) -> bool:
+        if not self.global_reacquire_enabled:
+            return False
+        if self.target_state.lost_frames < self.global_reacquire_after:
+            return False
+        if self.global_reacquire_interval <= 1:
+            return True
+        return self._frame_count % self.global_reacquire_interval == 0
