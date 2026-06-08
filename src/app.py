@@ -3,7 +3,8 @@ from time import perf_counter
 
 from src.cameras.base import CameraError, CameraSource
 from src.selection import ROISelector
-from src.tracking import OpenCVObjectTracker, TargetState, TrackerError
+from src.tracking import OpenCVObjectTracker, TargetState, TemplateReacquirer, TrackerError
+from src.tracking.opencv_tracker import TrackingResult
 from src.ui import DisplayOverlay, OpenCVDisplay
 
 
@@ -15,10 +16,14 @@ class TargetTrackingApp:
         self,
         camera_source: CameraSource,
         tracker: OpenCVObjectTracker | None = None,
-        tracker_type: str = "KCF",
-        tracking_scale: float = 0.5,
+        tracker_type: str = "CSRT",
+        tracking_scale: float = 0.75,
         smoothing_alpha: float = 0.35,
-        max_lost_frames: int = 10,
+        max_lost_frames: int = 90,
+        reacquire_enabled: bool = True,
+        reacquire_min_score: float = 0.62,
+        reacquire_search_expansion: float = 3.0,
+        template_update_interval: int = 15,
         display: OpenCVDisplay | None = None,
         roi_selector: ROISelector | None = None,
     ) -> None:
@@ -28,6 +33,12 @@ class TargetTrackingApp:
             smoothing_alpha=smoothing_alpha,
             max_lost_frames=max_lost_frames,
         )
+        self.reacquirer = TemplateReacquirer(
+            search_expansion=reacquire_search_expansion,
+            min_score=reacquire_min_score,
+        )
+        self.reacquire_enabled = reacquire_enabled
+        self.template_update_interval = template_update_interval
         self.display = display or OpenCVDisplay()
         self.roi_selector = roi_selector or ROISelector(self.display.window_name)
         self._last_bbox: tuple[int, int, int, int] | None = None
@@ -37,6 +48,7 @@ class TargetTrackingApp:
         self._fps = 0.0
         self._last_frame_time: float | None = None
         self._last_center_log_time = 0.0
+        self._last_reacquire_score = 0.0
 
     def run(self) -> None:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -67,16 +79,40 @@ class TargetTrackingApp:
             frame_stats = self._frame_stats(image)
             self._update_fps()
 
-            if self.tracker.initialized:
-                result = self.tracker.update(image)
+            if self.tracker.initialized or self.reacquirer.has_template:
+                result = TrackingResult(ok=False)
+                if self.tracker.initialized:
+                    result = self.tracker.update(image)
+                    if result.ok:
+                        self._last_reacquire_score = 0.0
+
+                previous_status = self._status
                 state = self.target_state.update(result, image.shape)
+
+                if not result.ok and self.reacquire_enabled:
+                    reacquired_bbox, score = self.reacquirer.search(image, state.bbox)
+                    self._last_reacquire_score = score
+                    if reacquired_bbox is not None:
+                        self.tracker.initialize(image, reacquired_bbox)
+                        self.reacquirer.initialize(image, reacquired_bbox)
+                        state = self.target_state.initialize(reacquired_bbox)
+                        LOG.info(
+                            "Target reacquired: x=%d y=%d w=%d h=%d score=%.3f",
+                            *reacquired_bbox,
+                            score,
+                        )
+
                 self._last_bbox = state.bbox
                 self._last_center = state.center
                 self._status = state.status
-                if state.expired:
+                if state.expired and self.tracker.initialized:
                     self.tracker.reset()
-                    LOG.info("Target expired after lost frames")
+                    if previous_status != "TARGET STALE":
+                        LOG.info("Target stale, continuing prediction and reacquire search")
                 elif self._status == "TRACKING" and self._last_center is not None:
+                    if self.template_update_interval > 0:
+                        if self._frame_count % self.template_update_interval == 0:
+                            self.reacquirer.initialize(image, self._last_bbox)
                     now = perf_counter()
                     if now - self._last_center_log_time >= 1.0:
                         LOG.info("Target center: x=%d y=%d", *self._last_center)
@@ -118,6 +154,7 @@ class TargetTrackingApp:
 
     def _initialize_target(self, image, bbox: tuple[int, int, int, int]) -> None:
         self.tracker.initialize(image, bbox)
+        self.reacquirer.initialize(image, bbox)
         state = self.target_state.initialize(bbox)
         self._last_bbox = state.bbox
         self._last_center = state.center
@@ -126,6 +163,7 @@ class TargetTrackingApp:
 
     def _reset_target(self) -> None:
         self.tracker.reset()
+        self.reacquirer.reset()
         self.target_state.reset()
         self._last_bbox = None
         self._last_center = None
@@ -167,4 +205,8 @@ class TargetTrackingApp:
             self._fps = self._fps * 0.9 + current_fps * 0.1
 
     def _telemetry(self) -> str:
-        return f"fps={self._fps:.1f} lost={self.target_state.lost_frames}"
+        return (
+            f"fps={self._fps:.1f} "
+            f"lost={self.target_state.lost_frames} "
+            f"match={self._last_reacquire_score:.2f}"
+        )

@@ -78,7 +78,7 @@ class OpenCVDisplay:
 
         if overlay.bbox is not None:
             x, y, w, h = overlay.bbox
-            color = (0, 255, 0) if overlay.status == "TRACKING" else (0, 165, 255)
+            color = self._status_color(overlay.status)
             cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
 
         if overlay.center is not None:
@@ -114,6 +114,18 @@ class OpenCVDisplay:
             cv2.LINE_AA,
         )
 
+        if overlay.telemetry:
+            cv2.putText(
+                image,
+                overlay.telemetry,
+                (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
         if overlay.frame_stats:
             cv2.putText(
                 image,
@@ -126,14 +138,12 @@ class OpenCVDisplay:
                 cv2.LINE_AA,
             )
 
-        if overlay.telemetry:
-            cv2.putText(
-                image,
-                overlay.telemetry,
-                (10, 90),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
+    @staticmethod
+    def _status_color(status: str) -> tuple[int, int, int]:
+        if status == "TRACKING":
+            return 0, 255, 0
+        if status == "PREDICTING":
+            return 0, 255, 255
+        if status == "TARGET STALE":
+            return 0, 0, 255
+        return 0, 165, 255

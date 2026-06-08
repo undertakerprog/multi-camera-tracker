@@ -22,20 +22,20 @@ python3 main.py
 Дополнительные параметры:
 
 ```bash
-python3 main.py --tracker CSRT
-python3 main.py --tracker KCF --tracking-scale 0.5 --serial 24802261 --exposure-us 5000 --gain-db 3
+python3 main.py --tracker CSRT --tracking-scale 0.75
+python3 main.py --tracker CSRT --tracking-scale 1.0 --serial 24802261 --exposure-us 5000 --gain-db 3
 ```
 
-Для более быстрого трекинга можно уменьшить внутренний размер кадра:
+Для более быстрого трекинга можно переключиться на KCF и уменьшить внутренний размер кадра:
 
 ```bash
-python3 main.py --tracker KCF --tracking-scale 0.33
+python3 main.py --tracker KCF --tracking-scale 0.5
 ```
 
-Сглаживание рамки и удержание состояния при краткой потере цели:
+Сглаживание, прогноз и перезахват:
 
 ```bash
-python3 main.py --tracker KCF --tracking-scale 0.5 --smooth-alpha 0.3 --max-lost-frames 10
+python3 main.py --tracker CSRT --tracking-scale 0.75 --smooth-alpha 0.3 --max-lost-frames 120 --reacquire-score 0.62
 ```
 
 Управление:
