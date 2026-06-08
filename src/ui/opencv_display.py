@@ -16,7 +16,7 @@ class DisplayOverlay:
 
 
 class OpenCVDisplay:
-    def __init__(self, window_name: str = "Target Tracker", auto_contrast: bool = True) -> None:
+    def __init__(self, window_name: str = "Target Tracker", auto_contrast: bool = False) -> None:
         self.window_name = window_name
         self.auto_contrast = auto_contrast
         self._created = False

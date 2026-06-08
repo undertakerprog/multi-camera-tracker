@@ -32,6 +32,19 @@ python3 main.py --tracker CSRT --tracking-scale 1.0 --serial 24802261 --exposure
 python3 main.py --tracker KCF --tracking-scale 0.5
 ```
 
+Аппаратно уменьшить кадр Basler для повышения FPS:
+
+```bash
+python3 main.py --camera-width 1280 --camera-height 960 --tracker CSRT --tracking-scale 0.75
+python3 main.py --camera-width 1024 --camera-height 768 --tracker CSRT --tracking-scale 0.75
+```
+
+Стабильная яркость без автоэкспозиции и динамического автоконтраста:
+
+```bash
+python3 main.py --exposure-auto Off --gain-auto Off --exposure-us 5000 --gain-db 0
+```
+
 Сглаживание, прогноз и перезахват:
 
 ```bash

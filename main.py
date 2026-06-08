@@ -2,6 +2,7 @@ import argparse
 
 from src.app import TargetTrackingApp
 from src.cameras.basler_camera import BaslerCameraSource
+from src.ui import OpenCVDisplay
 
 
 def main() -> None:
@@ -86,9 +87,36 @@ def main() -> None:
     parser.add_argument("--exposure-us", type=int, default=None)
     parser.add_argument("--gain-db", type=float, default=None)
     parser.add_argument(
+        "--exposure-auto",
+        default="Off",
+        choices=["Off", "Once", "Continuous"],
+        help="Basler ExposureAuto mode",
+    )
+    parser.add_argument(
+        "--gain-auto",
+        default="Off",
+        choices=["Off", "Once", "Continuous"],
+        help="Basler GainAuto mode",
+    )
+    parser.add_argument(
         "--pixel-format",
         default="Mono8",
         help="Basler PixelFormat value, e.g. Mono8",
+    )
+    parser.add_argument("--camera-width", type=int, default=None)
+    parser.add_argument("--camera-height", type=int, default=None)
+    parser.add_argument("--offset-x", type=int, default=None)
+    parser.add_argument("--offset-y", type=int, default=None)
+    parser.add_argument(
+        "--no-center-roi",
+        action="store_true",
+        help="Do not center camera ROI after Width/Height change",
+    )
+    parser.add_argument("--camera-fps", type=float, default=None)
+    parser.add_argument(
+        "--display-auto-contrast",
+        action="store_true",
+        help="Normalize display brightness dynamically",
     )
     args = parser.parse_args()
 
@@ -96,8 +124,17 @@ def main() -> None:
         serial_number=args.serial,
         exposure_us=args.exposure_us,
         gain_db=args.gain_db,
+        exposure_auto=args.exposure_auto,
+        gain_auto=args.gain_auto,
         pixel_format=args.pixel_format,
+        width=args.camera_width,
+        height=args.camera_height,
+        offset_x=args.offset_x,
+        offset_y=args.offset_y,
+        center_roi=not args.no_center_roi,
+        frame_rate=args.camera_fps,
     )
+    display = OpenCVDisplay(auto_contrast=args.display_auto_contrast)
     app = TargetTrackingApp(
         camera_source=camera,
         tracker_type=args.tracker,
@@ -113,6 +150,7 @@ def main() -> None:
         global_reacquire_score=args.global_reacquire_score,
         global_reacquire_scale=args.global_reacquire_scale,
         template_update_interval=args.template_update_interval,
+        display=display,
     )
     app.run()
 

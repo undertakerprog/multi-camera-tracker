@@ -18,14 +18,30 @@ class BaslerCameraSource(CameraSource):
         source_id: str = "basler-0",
         exposure_us: float | None = None,
         gain_db: float | None = None,
+        exposure_auto: str = "Off",
+        gain_auto: str = "Off",
         pixel_format: str = "Mono8",
+        width: int | None = None,
+        height: int | None = None,
+        offset_x: int | None = None,
+        offset_y: int | None = None,
+        center_roi: bool = True,
+        frame_rate: float | None = None,
         timeout_ms: int = 5000,
     ) -> None:
         self.serial_number = serial_number
         self.source_id = source_id
         self.exposure_us = exposure_us
         self.gain_db = gain_db
+        self.exposure_auto = exposure_auto
+        self.gain_auto = gain_auto
         self.pixel_format = pixel_format
+        self.width = width
+        self.height = height
+        self.offset_x = offset_x
+        self.offset_y = offset_y
+        self.center_roi = center_roi
+        self.frame_rate = frame_rate
         self.timeout_ms = timeout_ms
 
         self._pylon: Any | None = None
@@ -155,15 +171,21 @@ class BaslerCameraSource(CameraSource):
 
     def _apply_settings(self) -> None:
         self._set_enum("PixelFormat", self.pixel_format)
+        self._apply_roi_settings()
+        self._apply_frame_rate()
 
         if self.exposure_us is not None:
             self._set_optional_enum("ExposureMode", "Timed")
             self._set_optional_enum("ExposureAuto", "Off")
             self._set_float("ExposureTime", self.exposure_us)
+        else:
+            self._set_optional_enum("ExposureAuto", self.exposure_auto)
 
         if self.gain_db is not None:
             self._set_optional_enum("GainAuto", "Off")
             self._set_float("Gain", self.gain_db)
+        else:
+            self._set_optional_enum("GainAuto", self.gain_auto)
 
     def _set_enum(self, name: str, value: str) -> None:
         node = getattr(self._camera, name)
@@ -179,6 +201,70 @@ class BaslerCameraSource(CameraSource):
         if not node.IsWritable():
             raise CameraError(f"Basler parameter {name} is not writable")
         node.SetValue(float(value))
+
+    def _apply_roi_settings(self) -> None:
+        if self.width is None and self.height is None:
+            return
+
+        # Offsets often must be zero before Width/Height can be reduced.
+        self._set_optional_integer("OffsetX", 0)
+        self._set_optional_integer("OffsetY", 0)
+
+        if self.width is not None:
+            self._set_integer("Width", self.width)
+        if self.height is not None:
+            self._set_integer("Height", self.height)
+
+        if self.center_roi:
+            self._center_offset("OffsetX")
+            self._center_offset("OffsetY")
+        else:
+            if self.offset_x is not None:
+                self._set_optional_integer("OffsetX", self.offset_x)
+            if self.offset_y is not None:
+                self._set_optional_integer("OffsetY", self.offset_y)
+
+    def _apply_frame_rate(self) -> None:
+        if self.frame_rate is None:
+            return
+
+        self._set_optional_bool("AcquisitionFrameRateEnable", True)
+        self._set_optional_float("AcquisitionFrameRate", self.frame_rate)
+
+    def _center_offset(self, name: str) -> None:
+        node = getattr(self._camera, name, None)
+        if node is None or not node.IsWritable():
+            return
+        self._set_integer(name, int(node.GetMax() / 2))
+
+    def _set_optional_bool(self, name: str, value: bool) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None and node.IsWritable():
+            node.SetValue(bool(value))
+
+    def _set_optional_float(self, name: str, value: float) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None and node.IsWritable():
+            node.SetValue(float(value))
+
+    def _set_optional_integer(self, name: str, value: int) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None and node.IsWritable():
+            node.SetValue(self._fit_integer_node_value(node, value))
+
+    def _set_integer(self, name: str, value: int) -> None:
+        node = getattr(self._camera, name)
+        if not node.IsWritable():
+            raise CameraError(f"Basler parameter {name} is not writable")
+        node.SetValue(self._fit_integer_node_value(node, value))
+
+    @staticmethod
+    def _fit_integer_node_value(node, value: int) -> int:
+        minimum = int(node.GetMin())
+        maximum = int(node.GetMax())
+        increment = int(node.GetInc()) or 1
+        clipped = max(minimum, min(maximum, int(value)))
+        return minimum + ((clipped - minimum) // increment) * increment
 
     def _to_opencv_image(self, image: np.ndarray) -> np.ndarray:
         if image is None:
