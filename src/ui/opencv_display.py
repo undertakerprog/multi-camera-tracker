@@ -8,6 +8,7 @@ import numpy as np
 class DisplayOverlay:
     bbox: tuple[int, int, int, int] | None = None
     selection_bbox: tuple[int, int, int, int] | None = None
+    roi_window: tuple[int, int, int, int] | None = None
     center: tuple[int, int] | None = None
     status: str = "NO TARGET"
     tracker_name: str | None = None
@@ -57,24 +58,36 @@ class OpenCVDisplay:
             self._created = False
 
     def _prepare_canvas(self, image: np.ndarray) -> np.ndarray:
-        canvas = image.copy()
+        gray = image.ndim == 2
+        canvas = self._maybe_auto_contrast(image)
+        # The pipeline keeps frames grayscale; build the BGR copy only here,
+        # right before drawing the coloured overlay.
+        if gray:
+            return cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
+        return canvas if canvas is not image else image.copy()
+
+    def _maybe_auto_contrast(self, image: np.ndarray) -> np.ndarray:
         if not self.auto_contrast:
-            return canvas
+            return image
 
-        if canvas.dtype != np.uint8:
-            return cv2.normalize(canvas, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        if image.dtype != np.uint8:
+            return cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-        min_value = int(canvas.min())
-        max_value = int(canvas.max())
+        min_value = int(image.min())
+        max_value = int(image.max())
         if max_value <= 40 or max_value - min_value < 20:
-            return cv2.normalize(canvas, None, 0, 255, cv2.NORM_MINMAX)
+            return cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
 
-        return canvas
+        return image
 
     def _draw_overlay(self, image: np.ndarray, overlay: DisplayOverlay) -> None:
         if overlay.selection_bbox is not None:
             x, y, w, h = overlay.selection_bbox
             cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 255), 2)
+
+        if overlay.roi_window is not None:
+            x, y, w, h = overlay.roi_window
+            cv2.rectangle(image, (x, y), (x + w, y + h), (120, 120, 120), 1)
 
         if overlay.bbox is not None:
             x, y, w, h = overlay.bbox
@@ -144,6 +157,8 @@ class OpenCVDisplay:
             return 0, 255, 0
         if status == "PREDICTING":
             return 0, 255, 255
+        if status == "REACQUIRING":
+            return 255, 0, 255
         if status == "TARGET STALE":
             return 0, 0, 255
         return 0, 165, 255

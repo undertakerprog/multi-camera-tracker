@@ -28,6 +28,7 @@ class BaslerCameraSource(CameraSource):
         center_roi: bool = True,
         frame_rate: float | None = None,
         timeout_ms: int = 5000,
+        convert_to_bgr: bool = False,
     ) -> None:
         self.serial_number = serial_number
         self.source_id = source_id
@@ -43,6 +44,7 @@ class BaslerCameraSource(CameraSource):
         self.center_roi = center_roi
         self.frame_rate = frame_rate
         self.timeout_ms = timeout_ms
+        self.convert_to_bgr = convert_to_bgr
 
         self._pylon: Any | None = None
         self._camera: Any | None = None
@@ -318,16 +320,25 @@ class BaslerCameraSource(CameraSource):
         return minimum + ((clipped - minimum) // increment) * increment
 
     def _to_opencv_image(self, image: np.ndarray) -> np.ndarray:
+        """Convert a raw Basler array into a frame for the pipeline.
+
+        For ``Mono8`` the native single-channel grayscale array is kept as-is so
+        downstream tracking/ORB/template-matching can work on it directly. A BGR
+        copy is produced only when ``convert_to_bgr`` is requested (the display
+        subsystem does this itself just before rendering, see
+        :class:`~src.ui.opencv_display.OpenCVDisplay`). Brightness is never
+        altered for 8-bit frames.
+        """
         if image is None:
             raise CameraError("Basler returned an empty image")
 
         opencv_image = np.asarray(image)
 
         if opencv_image.ndim == 2:
-            if opencv_image.dtype == np.uint8:
-                return cv2.cvtColor(opencv_image, cv2.COLOR_GRAY2BGR)
-            normalized = cv2.normalize(opencv_image, None, 0, 255, cv2.NORM_MINMAX)
-            return cv2.cvtColor(normalized.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+            gray = self._to_display_gray(opencv_image)
+            if self.convert_to_bgr:
+                return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            return gray
 
         if opencv_image.ndim == 3 and opencv_image.shape[2] == 3:
             return cv2.cvtColor(opencv_image, cv2.COLOR_RGB2BGR)
@@ -336,6 +347,26 @@ class BaslerCameraSource(CameraSource):
             return cv2.cvtColor(opencv_image, cv2.COLOR_RGBA2BGRA)
 
         raise CameraError(f"Unsupported Basler image shape: {opencv_image.shape}")
+
+    @staticmethod
+    def _to_display_gray(mono: np.ndarray) -> np.ndarray:
+        """Return an 8-bit grayscale view without min/max auto-contrast.
+
+        8-bit frames are passed through untouched (brightness preserved). Higher
+        bit depths (Mono10/12/16) are scaled down by a fixed bit shift derived
+        from the dtype, which keeps relative brightness stable instead of
+        stretching contrast per frame.
+        """
+        if mono.dtype == np.uint8:
+            return mono
+
+        if np.issubdtype(mono.dtype, np.integer):
+            bits = mono.dtype.itemsize * 8
+            shift = max(0, bits - 8)
+            return (mono >> shift).astype(np.uint8) if shift else mono.astype(np.uint8)
+
+        # Floating point or unexpected dtype: clip into the 0..255 range.
+        return np.clip(mono, 0, 255).astype(np.uint8)
 
     def _require_opened(self) -> None:
         if not self._camera or not self._opened:

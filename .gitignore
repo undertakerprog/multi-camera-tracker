@@ -5,3 +5,6 @@ venv/
 .env
 .mypy_cache/
 .pytest_cache/
+
+# Board-specific generated diagnostics report
+docs/JETSON_DIAGNOSTICS.md

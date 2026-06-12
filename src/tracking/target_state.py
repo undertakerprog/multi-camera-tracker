@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from src.tracking import states
 from src.tracking.opencv_tracker import TrackingResult
 
 
@@ -13,6 +14,8 @@ class TargetStateUpdate:
     center: tuple[int, int] | None
     lost_frames: int
     expired: bool = False
+    confirmed: bool = False
+    confirmations: int = 0
 
 
 class TargetState:
@@ -32,6 +35,7 @@ class TargetState:
         self.min_box_size = min_box_size
         self._bbox: tuple[float, float, float, float] | None = None
         self._lost_frames = 0
+        self._confirmations = 0
         self._kalman = self._create_kalman()
 
     @property
@@ -50,11 +54,16 @@ class TargetState:
     def lost_frames(self) -> int:
         return self._lost_frames
 
+    @property
+    def confirmations(self) -> int:
+        return self._confirmations
+
     def initialize(self, bbox: tuple[int, int, int, int]) -> TargetStateUpdate:
         self._bbox = tuple(float(value) for value in bbox)
         self._lost_frames = 0
+        self._confirmations = 1
         self._reset_kalman(bbox)
-        return self._update("TRACKING")
+        return self._update(states.TRACKING, confirmed=True)
 
     def update(
         self,
@@ -65,31 +74,43 @@ class TargetState:
 
         if result.ok and result.bbox is not None and self._is_valid(result.bbox, frame_shape):
             self._lost_frames = 0
+            self._confirmations += 1
             corrected_bbox = self._clip_bbox(
                 self._correct(self._clip_bbox(result.bbox, frame_shape)),
                 frame_shape,
             )
             self._bbox = self._smooth(corrected_bbox)
-            return self._update("TRACKING")
+            return self._update(states.TRACKING, confirmed=True)
 
         self._lost_frames += 1
+        self._confirmations = 0
         if predicted_bbox is not None:
             self._bbox = tuple(float(value) for value in predicted_bbox)
 
         if self._lost_frames > self.max_lost_frames:
             return TargetStateUpdate(
-                status="TARGET STALE",
+                status=states.TARGET_STALE,
                 bbox=self.bbox,
                 center=self.center,
                 lost_frames=self._lost_frames,
                 expired=True,
+                confirmations=self._confirmations,
             )
 
-        return self._update("PREDICTING")
+        return self._update(states.PREDICTING)
+
+    def mark_lost(self) -> None:
+        """Force the next observation to be treated as a fresh confirmation.
+
+        Used when an external verifier (e.g. periodic template check) rejects the
+        tracker output so a stuck box is not trusted indefinitely.
+        """
+        self._confirmations = 0
 
     def reset(self) -> None:
         self._bbox = None
         self._lost_frames = 0
+        self._confirmations = 0
         self._kalman = self._create_kalman()
 
     def _smooth(self, bbox: tuple[int, int, int, int]) -> tuple[float, float, float, float]:
@@ -103,12 +124,14 @@ class TargetState:
             for previous, incoming in zip(self._bbox, current)
         )
 
-    def _update(self, status: str) -> TargetStateUpdate:
+    def _update(self, status: str, confirmed: bool = False) -> TargetStateUpdate:
         return TargetStateUpdate(
             status=status,
             bbox=self.bbox,
             center=self.center,
             lost_frames=self._lost_frames,
+            confirmed=confirmed,
+            confirmations=self._confirmations,
         )
 
     def _is_valid(self, bbox: tuple[int, int, int, int], frame_shape: tuple[int, ...]) -> bool:
