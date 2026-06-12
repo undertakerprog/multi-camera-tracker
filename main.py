@@ -152,13 +152,13 @@ def main() -> None:
 
     parser = build_parser(config, profile_name, parents=[bootstrap])
     args = parser.parse_args()
+    tracking_config = resolve_tracking_config(config, profile_name)
 
     camera = build_camera(args)
 
     if args.benchmark:
         from src.benchmark import format_report, run_benchmark
 
-        tracking_config = resolve_tracking_config(config, profile_name)
         tracking_config["use_roi"] = not args.no_roi
         tracking_config["roi_scale"] = args.roi_scale
         roi = parse_roi(args.benchmark_roi)
@@ -179,6 +179,7 @@ def main() -> None:
         roi_min_window=args.roi_min_window,
         smoothing_alpha=args.smooth_alpha,
         max_lost_frames=args.max_lost_frames,
+        prediction_display_frames=tracking_config.get("prediction_display_frames", 15),
         reacquire_enabled=not args.disable_reacquire,
         reacquire_min_score=args.reacquire_score,
         reacquire_search_expansion=args.reacquire_search,
