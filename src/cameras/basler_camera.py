@@ -190,20 +190,68 @@ class BaslerCameraSource(CameraSource):
 
     def _set_enum(self, name: str, value: str) -> None:
         node = getattr(self._camera, name)
-        if not self._is_writable(node):
-            raise CameraError(f"Basler parameter {name} is not writable")
-        node.SetValue(value)
+        try:
+            node.SetValue(value)
+        except Exception as exc:
+            raise CameraError(f"Failed to set Basler parameter {name}={value}: {exc}") from exc
 
     def _set_optional_enum(self, name: str, value: str) -> None:
         node = getattr(self._camera, name, None)
-        if node is not None and self._is_writable(node):
-            node.SetValue(value)
+        if node is not None:
+            try:
+                node.SetValue(value)
+            except Exception:
+                pass
 
     def _set_float(self, name: str, value: float) -> None:
         node = getattr(self._camera, name)
-        if not self._is_writable(node):
-            raise CameraError(f"Basler parameter {name} is not writable")
-        node.SetValue(float(value))
+        try:
+            node.SetValue(float(value))
+        except Exception as exc:
+            raise CameraError(f"Failed to set Basler parameter {name}={value}: {exc}") from exc
+
+    def _set_optional_float(self, name: str, value: float) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None:
+            try:
+                node.SetValue(float(value))
+            except Exception:
+                pass
+
+    def _set_optional_bool(self, name: str, value: bool) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None:
+            try:
+                node.SetValue(bool(value))
+            except Exception:
+                pass
+
+    def _set_optional_integer(self, name: str, value: int) -> None:
+        node = getattr(self._camera, name, None)
+        if node is not None:
+            try:
+                node.SetValue(self._fit_integer_node_value(node, value))
+            except Exception:
+                pass
+
+    def _set_integer(self, name: str, value: int) -> None:
+        node = getattr(self._camera, name)
+        fitted_value = self._fit_integer_node_value(node, value)
+        try:
+            node.SetValue(fitted_value)
+        except Exception as exc:
+            raise CameraError(
+                f"Failed to set Basler parameter {name}={fitted_value}: {exc}"
+            ) from exc
+
+    def _center_offset(self, name: str) -> None:
+        node = getattr(self._camera, name, None)
+        if node is None:
+            return
+        try:
+            self._set_optional_integer(name, int(node.GetMax() / 2))
+        except Exception:
+            pass
 
     def _apply_roi_settings(self) -> None:
         if self.width is None and self.height is None:
@@ -234,39 +282,6 @@ class BaslerCameraSource(CameraSource):
         self._set_optional_bool("AcquisitionFrameRateEnable", True)
         self._set_optional_float("AcquisitionFrameRate", self.frame_rate)
 
-    def _center_offset(self, name: str) -> None:
-        node = getattr(self._camera, name, None)
-        if node is None or not self._is_writable(node):
-            return
-        self._set_integer(name, int(node.GetMax() / 2))
-
-    def _set_optional_bool(self, name: str, value: bool) -> None:
-        node = getattr(self._camera, name, None)
-        if node is not None and self._is_writable(node):
-            node.SetValue(bool(value))
-
-    def _set_optional_float(self, name: str, value: float) -> None:
-        node = getattr(self._camera, name, None)
-        if node is not None and self._is_writable(node):
-            node.SetValue(float(value))
-
-    def _set_optional_integer(self, name: str, value: int) -> None:
-        node = getattr(self._camera, name, None)
-        if node is not None and self._is_writable(node):
-            node.SetValue(self._fit_integer_node_value(node, value))
-
-    def _set_integer(self, name: str, value: int) -> None:
-        node = getattr(self._camera, name)
-        if not self._is_writable(node):
-            raise CameraError(f"Basler parameter {name} is not writable")
-        node.SetValue(self._fit_integer_node_value(node, value))
-
-    def _is_writable(self, node) -> bool:
-        if self._pylon is not None:
-            return bool(self._pylon.IsWritable(node))
-        is_writable = getattr(node, "IsWritable", None)
-        return bool(is_writable and is_writable())
-
     def _log_camera_settings(self) -> None:
         settings = {
             "Width": self._get_node_value("Width"),
@@ -278,6 +293,7 @@ class BaslerCameraSource(CameraSource):
             "ExposureAuto": self._get_node_value("ExposureAuto"),
             "Gain": self._get_node_value("Gain"),
             "GainAuto": self._get_node_value("GainAuto"),
+            "ResultingFrameRate": self._get_node_value("ResultingFrameRate"),
         }
         print(
             "Basler settings: "

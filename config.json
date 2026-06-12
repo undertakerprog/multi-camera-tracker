@@ -1,0 +1,34 @@
+{
+  "camera": {
+    "serial": "24802261",
+    "width": 1280,
+    "height": 960,
+    "offset_x": null,
+    "offset_y": null,
+    "center_roi": true,
+    "frame_rate": null,
+    "pixel_format": "Mono8",
+    "exposure_us": 5000,
+    "gain_db": 0,
+    "exposure_auto": "Off",
+    "gain_auto": "Off"
+  },
+  "tracking": {
+    "tracker": "CSRT",
+    "scale": 0.75,
+    "smooth_alpha": 0.35,
+    "max_lost_frames": 120,
+    "reacquire_enabled": true,
+    "reacquire_score": 0.62,
+    "reacquire_search": 3.0,
+    "global_reacquire_enabled": true,
+    "global_reacquire_after": 8,
+    "global_reacquire_interval": 5,
+    "global_reacquire_score": 0.72,
+    "global_reacquire_scale": 0.5,
+    "template_update_interval": 15
+  },
+  "display": {
+    "auto_contrast": false
+  }
+}

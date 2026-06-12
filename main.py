@@ -1,122 +1,151 @@
 import argparse
+import json
+from pathlib import Path
 
 from src.app import TargetTrackingApp
 from src.cameras.basler_camera import BaslerCameraSource
 from src.ui import OpenCVDisplay
 
 
+def load_config(path: str) -> dict:
+    config_path = Path(path)
+    if not config_path.exists():
+        return {}
+
+    with config_path.open("r", encoding="utf-8") as config_file:
+        return json.load(config_file)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Jetson target tracking prototype")
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument("--config", default="config.json")
+    known_args, _ = config_parser.parse_known_args()
+
+    config = load_config(known_args.config)
+    camera_config = config.get("camera", {})
+    tracking_config = config.get("tracking", {})
+    display_config = config.get("display", {})
+
+    parser = argparse.ArgumentParser(
+        description="Jetson target tracking prototype",
+        parents=[config_parser],
+    )
     parser.add_argument(
         "--tracker",
-        default="CSRT",
+        default=tracking_config.get("tracker", "CSRT"),
         choices=["CSRT", "KCF", "MOSSE", "MIL"],
-        help="OpenCV tracker type",
     )
     parser.add_argument(
         "--tracking-scale",
         type=float,
-        default=0.75,
-        help="Scale used internally by tracker, 1.0 is full resolution",
+        default=tracking_config.get("scale", 0.75),
     )
     parser.add_argument(
         "--smooth-alpha",
         type=float,
-        default=0.35,
-        help="Bounding box smoothing alpha, higher is more responsive",
+        default=tracking_config.get("smooth_alpha", 0.35),
     )
     parser.add_argument(
         "--max-lost-frames",
         type=int,
-        default=120,
-        help="Frames to keep last target state after tracker update failure",
+        default=tracking_config.get("max_lost_frames", 120),
     )
     parser.add_argument(
         "--disable-reacquire",
         action="store_true",
-        help="Disable template-based target reacquisition",
+        default=not tracking_config.get("reacquire_enabled", True),
     )
     parser.add_argument(
         "--reacquire-score",
         type=float,
-        default=0.62,
-        help="Minimum template match score for reacquisition",
+        default=tracking_config.get("reacquire_score", 0.62),
     )
     parser.add_argument(
         "--reacquire-search",
         type=float,
-        default=3.0,
-        help="Search area expansion around predicted target bbox",
+        default=tracking_config.get("reacquire_search", 3.0),
     )
     parser.add_argument(
         "--disable-global-reacquire",
         action="store_true",
-        help="Disable full-frame target re-identification after local search fails",
+        default=not tracking_config.get("global_reacquire_enabled", True),
     )
     parser.add_argument(
         "--global-reacquire-after",
         type=int,
-        default=8,
-        help="Lost frames before full-frame target re-identification starts",
+        default=tracking_config.get("global_reacquire_after", 8),
     )
     parser.add_argument(
         "--global-reacquire-interval",
         type=int,
-        default=5,
-        help="Run full-frame re-identification every N frames while lost",
+        default=tracking_config.get("global_reacquire_interval", 5),
     )
     parser.add_argument(
         "--global-reacquire-score",
         type=float,
-        default=0.72,
-        help="Minimum full-frame template score for re-identification fallback",
+        default=tracking_config.get("global_reacquire_score", 0.72),
     )
     parser.add_argument(
         "--global-reacquire-scale",
         type=float,
-        default=0.5,
-        help="Scale for full-frame template re-identification fallback",
+        default=tracking_config.get("global_reacquire_scale", 0.5),
     )
     parser.add_argument(
         "--template-update-interval",
         type=int,
-        default=15,
-        help="Frames between template refreshes while tracking",
+        default=tracking_config.get("template_update_interval", 15),
     )
-    parser.add_argument("--serial", default=None, help="Basler camera serial number")
-    parser.add_argument("--exposure-us", type=int, default=None)
-    parser.add_argument("--gain-db", type=float, default=None)
+    parser.add_argument("--serial", default=camera_config.get("serial"))
+    parser.add_argument(
+        "--exposure-us",
+        type=int,
+        default=camera_config.get("exposure_us"),
+    )
+    parser.add_argument(
+        "--gain-db",
+        type=float,
+        default=camera_config.get("gain_db"),
+    )
     parser.add_argument(
         "--exposure-auto",
-        default="Off",
+        default=camera_config.get("exposure_auto", "Off"),
         choices=["Off", "Once", "Continuous"],
-        help="Basler ExposureAuto mode",
     )
     parser.add_argument(
         "--gain-auto",
-        default="Off",
+        default=camera_config.get("gain_auto", "Off"),
         choices=["Off", "Once", "Continuous"],
-        help="Basler GainAuto mode",
     )
     parser.add_argument(
         "--pixel-format",
-        default="Mono8",
-        help="Basler PixelFormat value, e.g. Mono8",
+        default=camera_config.get("pixel_format", "Mono8"),
     )
-    parser.add_argument("--camera-width", type=int, default=None)
-    parser.add_argument("--camera-height", type=int, default=None)
-    parser.add_argument("--offset-x", type=int, default=None)
-    parser.add_argument("--offset-y", type=int, default=None)
+    parser.add_argument(
+        "--camera-width",
+        type=int,
+        default=camera_config.get("width"),
+    )
+    parser.add_argument(
+        "--camera-height",
+        type=int,
+        default=camera_config.get("height"),
+    )
+    parser.add_argument("--offset-x", type=int, default=camera_config.get("offset_x"))
+    parser.add_argument("--offset-y", type=int, default=camera_config.get("offset_y"))
     parser.add_argument(
         "--no-center-roi",
         action="store_true",
-        help="Do not center camera ROI after Width/Height change",
+        default=not camera_config.get("center_roi", True),
     )
-    parser.add_argument("--camera-fps", type=float, default=None)
+    parser.add_argument(
+        "--camera-fps",
+        type=float,
+        default=camera_config.get("frame_rate"),
+    )
     parser.add_argument(
         "--display-auto-contrast",
         action="store_true",
-        help="Normalize display brightness dynamically",
+        default=display_config.get("auto_contrast", False),
     )
     args = parser.parse_args()
 
