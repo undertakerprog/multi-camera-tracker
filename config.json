@@ -1,4 +1,5 @@
 {
+  "profile": "balanced",
   "camera": {
     "serial": "24802261",
     "width": 1280,
@@ -13,22 +14,62 @@
     "exposure_auto": "Off",
     "gain_auto": "Off"
   },
+  "display": {
+    "auto_contrast": false
+  },
   "tracking": {
     "tracker": "CSRT",
     "scale": 0.75,
+    "use_roi": true,
+    "roi_scale": 2.5,
+    "roi_edge_margin": 0.15,
+    "roi_min_window": 64,
     "smooth_alpha": 0.35,
     "max_lost_frames": 120,
     "reacquire_enabled": true,
     "reacquire_score": 0.62,
     "reacquire_search": 3.0,
+    "reacquire_cooldown": 8,
     "global_reacquire_enabled": true,
     "global_reacquire_after": 8,
     "global_reacquire_interval": 5,
     "global_reacquire_score": 0.72,
     "global_reacquire_scale": 0.5,
-    "template_update_interval": 15
+    "template_update_interval": 15,
+    "template_min_confirmations": 5,
+    "verify_interval": 20,
+    "verify_min_score": 0.45
   },
-  "display": {
-    "auto_contrast": false
+  "profiles": {
+    "quality": {
+      "tracker": "CSRT",
+      "scale": 1.0,
+      "use_roi": true,
+      "roi_scale": 3.0,
+      "smooth_alpha": 0.3,
+      "max_lost_frames": 150,
+      "template_update_interval": 12,
+      "global_reacquire_interval": 4
+    },
+    "balanced": {
+      "tracker": "CSRT",
+      "scale": 0.75,
+      "use_roi": true,
+      "roi_scale": 2.5,
+      "smooth_alpha": 0.35,
+      "max_lost_frames": 120,
+      "template_update_interval": 15,
+      "global_reacquire_interval": 5
+    },
+    "fast": {
+      "tracker": "KCF",
+      "scale": 0.75,
+      "use_roi": true,
+      "roi_scale": 2.0,
+      "smooth_alpha": 0.4,
+      "max_lost_frames": 90,
+      "template_update_interval": 20,
+      "global_reacquire_interval": 8
+    }
   }
 }
