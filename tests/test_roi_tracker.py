@@ -1,6 +1,7 @@
 import numpy as np
 
-from src.tracking.opencv_tracker import TrackingResult
+from tests._util import raises
+from src.tracking.opencv_tracker import TrackerError, TrackingResult
 from src.tracking.roi_tracker import DynamicROITracker
 
 
@@ -71,3 +72,22 @@ def test_reset_clears_state():
     assert not tracker.initialized
     assert tracker.window is None
     assert tracker.update(_frame()).ok is False
+
+
+def test_initialize_rejects_bbox_outside_frame():
+    tracker = DynamicROITracker(inner=FakeInner())
+    with raises(TrackerError):
+        tracker.initialize(_frame(), (500, 500, 20, 20))
+
+
+def test_update_rejects_inner_bbox_outside_crop_without_crashing():
+    inner = FakeInner()
+    tracker = DynamicROITracker(inner=inner)
+    tracker.initialize(_frame(), (190, 190, 20, 20))
+    inner.next_local = (1000, 1000, 20, 20)
+
+    result = tracker.update(_frame())
+
+    assert not result.ok
+    assert not tracker.initialized
+    assert tracker.window is None

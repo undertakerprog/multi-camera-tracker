@@ -63,6 +63,7 @@ class DynamicROITracker:
         return self._recenters
 
     def initialize(self, image: np.ndarray, bbox: tuple[int, int, int, int]) -> None:
+        self.reset()
         self._window = self._window_for(bbox, image.shape)
         self._init_inner(image, bbox)
         self._active = True
@@ -74,6 +75,7 @@ class DynamicROITracker:
         wx, wy, ww, wh = self._window
         crop = image[wy : wy + wh, wx : wx + ww]
         if crop.size == 0:
+            self.reset()
             return TrackingResult(ok=False)
 
         result = self._inner.update(crop)
@@ -82,6 +84,9 @@ class DynamicROITracker:
 
         lx, ly, lw, lh = result.bbox
         full_bbox = self._clip_bbox((wx + lx, wy + ly, lw, lh), image.shape)
+        if full_bbox is None:
+            self.reset()
+            return TrackingResult(ok=False)
 
         if self._near_edge(result.bbox, self._window):
             self._recenter(image, full_bbox)
@@ -97,16 +102,20 @@ class DynamicROITracker:
     def _init_inner(self, image: np.ndarray, full_bbox: tuple[int, int, int, int]) -> None:
         assert self._window is not None
         wx, wy, ww, wh = self._window
+        crop = image[wy : wy + wh, wx : wx + ww]
+        if crop.size == 0:
+            raise TrackerError("Dynamic ROI produced an empty crop")
         local = self._clip_bbox(
             (full_bbox[0] - wx, full_bbox[1] - wy, full_bbox[2], full_bbox[3]),
-            (wh, ww),
+            crop.shape,
         )
-        crop = image[wy : wy + wh, wx : wx + ww]
+        if local is None:
+            raise TrackerError("Target bbox does not overlap the dynamic ROI")
         self._inner.initialize(crop, local)
 
     def _recenter(self, image: np.ndarray, full_bbox: tuple[int, int, int, int]) -> None:
-        new_window = self._window_for(full_bbox, image.shape)
         try:
+            new_window = self._window_for(full_bbox, image.shape)
             self._window = new_window
             self._init_inner(image, full_bbox)
             self._recenters += 1
@@ -114,15 +123,22 @@ class DynamicROITracker:
             # Re-init failed: drop to "not initialized" so the app's reacquire
             # path takes over instead of silently tracking a stale window.
             LOG.warning("ROI re-center failed, handing off to reacquire: %s", exc)
-            self._active = False
+            self.reset()
 
     def _window_for(
         self,
         bbox: tuple[int, int, int, int],
         frame_shape: tuple[int, ...],
     ) -> tuple[int, int, int, int]:
+        if len(frame_shape) < 2:
+            raise TrackerError("Cannot build dynamic ROI for an empty frame")
         height, width = frame_shape[:2]
-        x, y, w, h = bbox
+        if height <= 0 or width <= 0:
+            raise TrackerError("Cannot build dynamic ROI for an empty frame")
+        clipped = self._clip_bbox(bbox, frame_shape)
+        if clipped is None:
+            raise TrackerError("Target bbox is outside the frame")
+        x, y, w, h = clipped
         cx = x + w / 2.0
         cy = y + h / 2.0
         ww = min(width, max(self.min_window, int(round(w * self.roi_scale))))
@@ -153,11 +169,19 @@ class DynamicROITracker:
     def _clip_bbox(
         bbox: tuple[int, int, int, int],
         frame_shape: tuple[int, ...],
-    ) -> tuple[int, int, int, int]:
+    ) -> tuple[int, int, int, int] | None:
+        if len(frame_shape) < 2:
+            return None
         height, width = frame_shape[:2]
+        if height <= 0 or width <= 0:
+            return None
         x, y, w, h = bbox
-        x1 = max(0, min(width - 1, x))
-        y1 = max(0, min(height - 1, y))
-        x2 = max(0, min(width, x + w))
-        y2 = max(0, min(height, y + h))
-        return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
+        if w <= 0 or h <= 0:
+            return None
+        x1 = max(0, x)
+        y1 = max(0, y)
+        x2 = min(width, x + w)
+        y2 = min(height, y + h)
+        if x2 - x1 < 2 or y2 - y1 < 2:
+            return None
+        return x1, y1, x2 - x1, y2 - y1

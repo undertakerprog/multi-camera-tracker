@@ -42,6 +42,7 @@ class TargetTrackingApp:
         roi_min_window: int = 64,
         smoothing_alpha: float = 0.35,
         max_lost_frames: int = 90,
+        prediction_display_frames: int = 15,
         reacquire_enabled: bool = True,
         reacquire_min_score: float = 0.62,
         reacquire_search_expansion: float = 3.0,
@@ -75,6 +76,7 @@ class TargetTrackingApp:
             global_search_scale=global_reacquire_scale,
         )
         self.reacquire_enabled = reacquire_enabled
+        self.prediction_display_frames = max(0, prediction_display_frames)
         self.reacquire_cooldown_frames = max(0, reacquire_cooldown)
         self.global_reacquire_enabled = global_reacquire_enabled
         self.global_reacquire_after = global_reacquire_after
@@ -201,14 +203,19 @@ class TargetTrackingApp:
         if not result.ok and self.reacquire_enabled and self._cooldown == 0:
             state = self._attempt_reacquire(image, state)
         elif state.confirmed and self._status == states.TRACKING:
-            self._on_confirmed_tracking(image, state)
+            state = self._on_confirmed_tracking(image, state)
 
-        self._last_bbox = state.bbox
-        self._last_center = state.center
+        if self._should_display_state(state):
+            self._last_bbox = state.bbox
+            self._last_center = state.center
+        else:
+            self._last_bbox = None
+            self._last_center = None
 
-        if state.expired and self.tracker.initialized:
+        if state.expired:
             # Drop the tracker but keep object memory so reacquire can continue.
-            self.tracker.reset()
+            if self.tracker.initialized:
+                self.tracker.reset()
             if previous_status != states.TARGET_STALE:
                 LOG.info("Target stale, continuing prediction and reacquire search")
 
@@ -244,18 +251,24 @@ class TargetTrackingApp:
         )
         return state
 
-    def _on_confirmed_tracking(self, image, state) -> None:
-        if self._last_center is None or state.bbox is None:
-            return
+    def _on_confirmed_tracking(self, image, state):
+        if state.bbox is None:
+            return state
 
         # Periodic appearance verification guards against a "stuck" box that the
         # tracker keeps confirming while the real object has gone.
         if self.verify_interval > 0 and self._frame_count % self.verify_interval == 0:
             _, score = self.reacquirer.search(image, state.bbox)
+            self._last_reacquire_score = score
             if score < self.verify_min_score:
-                self.target_state.mark_lost()
-                LOG.info("Appearance verification failed (score=%.2f), distrusting box", score)
-                return
+                self.tracker.reset()
+                state = self.target_state.update(TrackingResult(ok=False), image.shape)
+                self._status = state.status
+                LOG.info(
+                    "Appearance verification failed (score=%.2f), tracker dropped",
+                    score,
+                )
+                return state
 
         # Adaptive template update only on a repeatedly confirmed observation.
         if (
@@ -267,9 +280,10 @@ class TargetTrackingApp:
             self.reacquirer.remember(image, state.bbox)
 
         now = perf_counter()
-        if now - self._last_center_log_time >= 1.0:
-            LOG.info("Target center: x=%d y=%d", *self._last_center)
+        if state.center is not None and now - self._last_center_log_time >= 1.0:
+            LOG.info("Target center: x=%d y=%d", *state.center)
             self._last_center_log_time = now
+        return state
 
     def _maybe_run_detector(self, image) -> None:
         if not self.detector.should_run(self._frame_count):
@@ -283,7 +297,12 @@ class TargetTrackingApp:
 
     # -- target management -------------------------------------------------
     def _initialize_target(self, image, bbox: tuple[int, int, int, int]) -> None:
-        self.tracker.initialize(image, bbox)
+        try:
+            self.tracker.initialize(image, bbox)
+        except TrackerError as exc:
+            self.tracker.reset()
+            LOG.warning("Target selection rejected: %s", exc)
+            return
         self.reacquirer.initialize(image, bbox)
         state = self.target_state.initialize(bbox)
         self._last_bbox = state.bbox
@@ -291,6 +310,11 @@ class TargetTrackingApp:
         self._status = state.status
         self._cooldown = 0
         LOG.info("Selected target bbox: x=%d y=%d w=%d h=%d", *bbox)
+
+    def _should_display_state(self, state) -> bool:
+        if state.bbox is None or state.expired:
+            return False
+        return state.confirmed or state.lost_frames <= self.prediction_display_frames
 
     def _reset_target(self) -> None:
         # Manual reset fully clears tracker, Kalman state and object memory.
