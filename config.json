@@ -1,7 +1,7 @@
 {
   "profile": "balanced",
   "camera": {
-    "serial": "24802261",
+    "serial": null,
     "width": 1280,
     "height": 960,
     "offset_x": null,
