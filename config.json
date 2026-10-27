@@ -12,7 +12,9 @@
     "exposure_us": 5000,
     "gain_db": 0,
     "exposure_auto": "Off",
-    "gain_auto": "Off"
+    "gain_auto": "Off",
+    "auto_exposure_max_us": null,
+    "rotate_180": false
   },
   "display": {
     "auto_contrast": false

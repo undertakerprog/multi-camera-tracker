@@ -64,3 +64,20 @@ A short GUI run on the Jetson desktop succeeded with `--serial 24802255`.
 The first frame was very dark (min 0, max 5, mean 0.7 at exposure 3000 us);
 check the lens cover, scene lighting and exposure before interpreting a dark
 preview as a capture failure. The test was stopped intentionally.
+
+## Brightness and Orientation Check
+
+A subsequent check with blinds open confirmed that raw Mono8 data itself was
+dark. Both internal `GreyDiagonalSawtooth8` test patterns spanned 0..255,
+indicating that the transport preserved the full 8-bit intensity range.
+
+For serial 24802255, mean brightness increased from approximately 6 at 10000 us /
+0 dB to 89 at 30000 us / 12 dB. For 24802269, the same settings increased mean
+brightness from approximately 2 to 36. Measurements depend on scene lighting.
+Captured images also showed substantial optical defocus; exposure changes do
+not resolve that blur.
+
+One-shot exposure and gain adjustment was tested with an exposure ceiling of
+30000 us. This ceiling limits exposure-related FPS loss; a camera using the full
+ceiling runs at approximately 33 FPS. Software rotation by 180 degrees is now
+configurable for the reported reversed horizontal and vertical image directions.

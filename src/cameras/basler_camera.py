@@ -29,6 +29,8 @@ class BaslerCameraSource(CameraSource):
         frame_rate: float | None = None,
         timeout_ms: int = 5000,
         convert_to_bgr: bool = False,
+        rotate_180: bool = False,
+        auto_exposure_max_us: float | None = None,
     ) -> None:
         self.serial_number = serial_number
         self.source_id = source_id
@@ -45,6 +47,8 @@ class BaslerCameraSource(CameraSource):
         self.frame_rate = frame_rate
         self.timeout_ms = timeout_ms
         self.convert_to_bgr = convert_to_bgr
+        self.rotate_180 = rotate_180
+        self.auto_exposure_max_us = auto_exposure_max_us
 
         self._pylon: Any | None = None
         self._camera: Any | None = None
@@ -122,6 +126,7 @@ class BaslerCameraSource(CameraSource):
                 "camera": "basler",
                 "serial_number": self.serial_number,
                 "pixel_format": self.pixel_format,
+                "rotate_180": self.rotate_180,
             },
         )
         self._sequence_id += 1
@@ -177,18 +182,23 @@ class BaslerCameraSource(CameraSource):
         self._apply_roi_settings()
         self._apply_frame_rate()
 
+        self._set_optional_enum("ExposureMode", "Timed")
+        self._set_optional_enum("ExposureAuto", "Off")
         if self.exposure_us is not None:
-            self._set_optional_enum("ExposureMode", "Timed")
-            self._set_optional_enum("ExposureAuto", "Off")
             self._set_float("ExposureTime", self.exposure_us)
-        else:
-            self._set_optional_enum("ExposureAuto", self.exposure_auto)
+        if self.auto_exposure_max_us is not None:
+            self._set_float("AutoExposureTimeUpperLimit", self.auto_exposure_max_us)
 
+        self._set_optional_enum("GainAuto", "Off")
         if self.gain_db is not None:
-            self._set_optional_enum("GainAuto", "Off")
             self._set_float("Gain", self.gain_db)
-        else:
-            self._set_optional_enum("GainAuto", self.gain_auto)
+
+        # Numeric settings seed the auto functions; an explicitly requested
+        # auto mode must remain enabled after those initial values are set.
+        if self.exposure_auto != "Off":
+            self._set_enum("ExposureAuto", self.exposure_auto)
+        if self.gain_auto != "Off":
+            self._set_enum("GainAuto", self.gain_auto)
 
     def _set_enum(self, name: str, value: str) -> None:
         node = getattr(self._camera, name)
@@ -286,6 +296,7 @@ class BaslerCameraSource(CameraSource):
 
     def _log_camera_settings(self) -> None:
         settings = {
+            "DeviceSerialNumber": self._get_node_value("DeviceSerialNumber"),
             "Width": self._get_node_value("Width"),
             "Height": self._get_node_value("Height"),
             "OffsetX": self._get_node_value("OffsetX"),
@@ -293,9 +304,11 @@ class BaslerCameraSource(CameraSource):
             "PixelFormat": self._get_node_value("PixelFormat"),
             "ExposureTime": self._get_node_value("ExposureTime"),
             "ExposureAuto": self._get_node_value("ExposureAuto"),
+            "AutoExposureTimeUpperLimit": self._get_node_value("AutoExposureTimeUpperLimit"),
             "Gain": self._get_node_value("Gain"),
             "GainAuto": self._get_node_value("GainAuto"),
             "ResultingFrameRate": self._get_node_value("ResultingFrameRate"),
+            "Rotate180": self.rotate_180,
         }
         print(
             "Basler settings: "
@@ -333,6 +346,8 @@ class BaslerCameraSource(CameraSource):
             raise CameraError("Basler returned an empty image")
 
         opencv_image = np.asarray(image)
+        if self.rotate_180:
+            opencv_image = cv2.rotate(opencv_image, cv2.ROTATE_180)
 
         if opencv_image.ndim == 2:
             gray = self._to_display_gray(opencv_image)

@@ -100,6 +100,10 @@ def build_parser(config: dict, profile_name: str, parents: list) -> argparse.Arg
                         choices=["Off", "Once", "Continuous"])
     parser.add_argument("--gain-auto", default=camera_config.get("gain_auto", "Off"),
                         choices=["Off", "Once", "Continuous"])
+    parser.add_argument("--auto-exposure-max-us", type=float,
+                        default=camera_config.get("auto_exposure_max_us"))
+    parser.add_argument("--rotate-180", action="store_true",
+                        default=camera_config.get("rotate_180", False))
     parser.add_argument("--pixel-format", default=camera_config.get("pixel_format", "Mono8"))
     parser.add_argument("--camera-width", type=int, default=camera_config.get("width"))
     parser.add_argument("--camera-height", type=int, default=camera_config.get("height"))
@@ -135,6 +139,8 @@ def build_camera(args) -> BaslerCameraSource:
         center_roi=not args.no_center_roi,
         frame_rate=args.camera_fps,
         convert_to_bgr=False,
+        rotate_180=args.rotate_180,
+        auto_exposure_max_us=args.auto_exposure_max_us,
     )
 
 
